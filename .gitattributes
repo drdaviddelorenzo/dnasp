@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+# Test fixtures are compared byte for byte; never rewrite their line endings
+skills/dnasp/tests/fixtures/** -text
+skills/dnasp/examples/*.fas -text

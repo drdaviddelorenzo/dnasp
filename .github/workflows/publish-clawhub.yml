@@ -1,0 +1,40 @@
+# Publishes skills/dnasp/ to ClawHub. MANUAL ONLY, and not to be run before a validated release.
+#
+# This repository packages the dnasp skill and is refreshed at each validated release. ClawHub
+# and Hermes are both fed from it:
+#   - ClawHub  <- the ClawHub web GitHub importer, or this workflow
+#   - Hermes   <- `hermes skills tap add drdaviddelorenzo/dnasp`, which reads skills/
+# so `skills/` is the layout both registries expect. Do not move it.
+#
+# This workflow is deliberately NOT triggered on push. It needs a repository secret
+# CLAWHUB_TOKEN, and without one every push would fail the run. To enable token-based
+# publishing: obtain a token with `clawhub login --device`, add it as the CLAWHUB_TOKEN
+# repository secret, then run this workflow by hand (dry run first). Publishing is idempotent:
+# the CLI compares the local bundle fingerprint against ClawHub and exits successfully when the
+# content is already published.
+
+name: Publish to ClawHub
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview only, no publish
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    # The called workflow requests id-token: write. A reusable workflow cannot hold more
+    # permission than its caller, and this repository's default is read-only, so the caller
+    # must grant these explicitly or the run fails at startup before any job begins.
+    permissions:
+      contents: read
+      id-token: write
+    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v0.23.3
+    with:
+      skill_path: skills/dnasp
+      owner: drdaviddelorenzo
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

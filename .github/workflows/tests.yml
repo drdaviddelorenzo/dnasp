@@ -1,0 +1,80 @@
+# Runs the dnasp test suite and a demo replay on Linux and Windows.
+#
+# The runners install nothing but pytest and matplotlib, so a passing run also shows the skill is
+# self-contained.
+# The no-matplotlib job checks the claim in SKILL.md and README that matplotlib is optional.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}${{ matrix.no-mpl && ' / no matplotlib' || '' }}
+    runs-on: ${{ matrix.os }}
+    env:
+      # Windows runners default to the ANSI code page (cp1252) for redirected output and for
+      # file I/O without an explicit encoding, and dnasp.py prints non-ASCII statistic symbols.
+      # UTF-8 mode lets the Windows jobs test everything else until the skill handles native
+      # Windows encodings itself; the fix arrives with the next refresh. Linux keeps Python's default.
+      PYTHONUTF8: ${{ startsWith(matrix.os, 'windows') && '1' || '0' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+        no-mpl: [false]
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+            no-mpl: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install test dependencies
+        run: python -m pip install "pytest>=7.0"
+
+      - name: Install matplotlib
+        if: ${{ !matrix.no-mpl }}
+        run: python -m pip install -r skills/dnasp/requirements.txt
+
+      - name: Run tests
+        run: python -m pytest skills/dnasp/tests -q
+
+      - name: Demo, checksums and shell replay
+        shell: bash
+        run: |
+          python skills/dnasp/dnasp.py --demo --output "demo run"
+          python - "demo run" <<'EOF'
+          import hashlib, sys
+          from pathlib import Path
+          out = Path(sys.argv[1])
+          lines = (out / "reproducibility" / "checksums.sha256").read_text(encoding="utf-8").splitlines()
+          assert lines, "checksums.sha256 is empty"
+          for line in lines:
+              digest, label = line.split("  ", 1)
+              assert hashlib.sha256((out / label).read_bytes()).hexdigest() == digest, label
+          print(f"{len(lines)} checksums verify")
+          EOF
+          bash "demo run/reproducibility/commands.sh"
+          python - "demo run" <<'EOF'
+          import sys
+          from pathlib import Path
+          out = Path(sys.argv[1])
+          first = (out / "results.tsv").read_text(encoding="utf-8").splitlines()[1:]
+          replay = (out / "replay_output" / "results.tsv").read_text(encoding="utf-8").splitlines()[1:]
+          assert first and first == replay, "replayed results.tsv differs from the original run"
+          print("commands.sh replay matches the original run")
+          EOF

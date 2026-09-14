@@ -1,0 +1,8 @@
+name: dnasp-python
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python>=3.10
+  - matplotlib>=3.7
+  - pytest>=7.0
