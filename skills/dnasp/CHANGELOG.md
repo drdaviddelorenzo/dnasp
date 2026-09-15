@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+Answers the ClawBio maintainer review of the DnaSP pull request; ported from the ClawBio tree.
+
+### Added
+- `SKILL.md`: a "Known Differences from DnaSP 6.12.03" section with the four unresolved VCF
+  single-site Pi and R2 values and the differences of setting, and a "Version History" section
+  listing every result-changing definition since 0.5.0.
+- `tests/fixtures/inputs/README.md` and `tests/fixtures/validation5/README.md`: provenance of every
+  test input and of the DnaSP captures and transcriptions; the three DnaSP 6.12.03 sliding-window
+  output files cited by the window tests.
+
+### Changed
+- `tests/test_historical_concordance.py` renamed `tests/test_historical_comparisons.py`. Besides
+  pinning the recorded Python values, it now checks each current value against DnaSP's printed
+  figure at DnaSP's precision, with the seven rows that differ from DnaSP listed with their reason.
+- Comments explain the two intentional `pass` branches flagged by CodeQL; an unused variable in
+  `test_cli_genetic_code_flag` is replaced by an assertion.
+
+### Fixed
+- VCF runs split by CHROM: a CHROM named `result.json` or `reproducibility` no longer takes the
+  root envelope's path or receives the root reproducibility bundle; it gets its own `chrom_`
+  directory.
+
 ## [0.5.2] - 2026-09-15
 
 Round-5 DnaSP 6.12.03 validation fixes; version bumped so that the three skill trees (ClawBio,
