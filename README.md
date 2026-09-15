@@ -10,7 +10,7 @@ The skill itself lives in **[`skills/dnasp/`](skills/dnasp/)**. See
 [`SKILL.md`](skills/dnasp/SKILL.md) for the agent-facing instructions and
 [`docs/index.md`](skills/dnasp/docs/index.md) for the statistical reference.
 
-> **Status:** version 0.5.1, not yet published to ClawHub or Hermes. Publication waits for a
+> **Status:** version 0.5.2, not yet published to ClawHub or Hermes. Publication waits for a
 > validated DnaSP release.
 
 ## Where the skill is developed

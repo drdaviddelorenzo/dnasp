@@ -4,12 +4,12 @@ description: Population genetics of pre-aligned DNA sequences or multi-sample VC
   using selected DnaSP 6 methods. Use for diversity, neutrality statistics, linkage
   disequilibrium, InDel polymorphism, divergence, MK, Ka/Ks and codon usage; not alignment,
   phasing or clinical interpretation.
-version: 0.5.1
+version: 0.5.2
 license: MIT
 compatibility: Requires Python 3.10+; matplotlib is optional and only draws figures.
   Runs fully offline with no network access.
 metadata:
-  version: 0.5.1
+  version: 0.5.2
   author: David De Lorenzo
   domain: molecular-evolution
   tags:
@@ -103,6 +103,21 @@ metadata:
     - tsv
     description: Polymorphism and sliding-window TSV only; other modules appear in
       report.md.
+  - name: result
+    type: file
+    format:
+    - json
+    description: result.json envelope with the same keys as ClawBio's (skill, version,
+      input checksum, headline summary, the summary.json payload plus artifact list,
+      chat_summary_lines and preferred_artifacts). A multi-CHROM VCF run writes one
+      envelope per CHROM directory and a root envelope summarising them by relative path.
+  - name: summary
+    type: file
+    format:
+    - json
+    description: Module summaries (global and per-window statistics with DnaSP
+      midpoints, LD/recombination/mismatch/InDel/divergence/MK/Ka-Ks/codon results
+      including named per-sequence ENC); LD pair grids are in ld_pairs, not here.
   - name: ld_pairs
     type: file
     format:
@@ -224,11 +239,27 @@ source conventions, file formats, examples and release validation evidence.
 - Polymorphism: S, Eta, haplotypes, Hd, VarHd, pi, k, theta-W, G+C,
   Tajima's D, Fu and Li D*/F*, Ramos-Onsins and Rozas R2.
 - LD: D, D', R2, ZnS, Za, ZZ and original-column pair labels; recombination Rm.
-- Mismatch distribution and raggedness; Model 1 diallelic InDel diversity.
+- Mismatch distribution with unbiased variance over unordered pairs and Sokal &
+  Rohlf corrected CV; Harpending (1994) raggedness; Model 1 diallelic InDel diversity.
 - Divergence and Hudson Fst between populations; outgroup Fu and Li D/F.
 - Two-locus HKA, McDonald-Kreitman, Nei-Gojobori Ka/Ks, Fu's Fs and SFS.
-- Ts/Tv, codon counts/RSCU including stops, and weighted per-sequence ENC.
+- Ts/Tv, codon counts/RSCU including stops, named per-sequence ENC and its
+  synonymous-codon-weighted summary.
+- Sliding windows mirror DnaSP's **Gaps in Sliding Window = considered** mode:
+  starts advance from 1 by the step, capped at alignment length; ends are capped
+  there too, and the first window reaching the end terminates the loop. Empty
+  windows are retained. The not-considered mode is not implemented.
+- Window midpoints are the alignment position of the ceil(net/2)-th gap-free
+  column, or the window start if none exists; exported in TSV, JSON and report
+  and used for the plot. VCF windows use retained SNP indices, including the
+  final partial window.
 - Raw per-site Fay-Wu H and theta-L minus theta-W; normalised Hn/ZE are absent.
+
+Fu and Li D*/F* and outgroup D/F mirror **Data > Segregating Sites/Mutations =
+Segregating sites**, using DnaSP's v5-style panels. The rp49 Eta-setting D*/F*
+figures can be reproduced by substituting eta for S, but this is not a general
+conversion: `FULI.vb` also changes singleton and external-mutation capping
+(`SingleMut` and `ExternaMut` subtraction). No Eta-mode switch is implemented.
 
 ## Workflow
 
@@ -287,6 +318,8 @@ suite, rather than the printed banner alone, checks the expected figures.
 output/
   report.md
   results.tsv                  # polymorphism and windows
+  summary.json                 # module summaries, window midpoints, named ENC/null
+  result.json                  # structured envelope: headline summary, summary.json payload, artifacts
   ld_pairs.tsv                 # when LD pairs exist
   figures/                     # when matplotlib is available
   reproducibility/

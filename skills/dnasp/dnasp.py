@@ -56,7 +56,7 @@ Usage:
 
 from __future__ import annotations
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 __author__  = "David De Lorenzo"
 __credits__ = [
     # Python reimplementation
@@ -79,8 +79,9 @@ import math
 import re
 import shutil
 import sys
+import unicodedata
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
@@ -219,6 +220,7 @@ class RegionStats:
     FuLiD_star: Optional[float] = None
     FuLiF_star: Optional[float] = None
     R2: Optional[float] = None
+    midpoint: int | None = None  # 1-based gap-free-site midpoint; windows only
 
     def as_tsv_row(self) -> list:
         def fmt(v: Optional[float]) -> str:
@@ -232,7 +234,7 @@ class RegionStats:
             fmt(self.ThetaW_nuc), fmt(self.ThetaW),
             fmt(self.TajimaD),
             fmt(self.FuLiD_star), fmt(self.FuLiF_star),
-            fmt(self.R2),
+            fmt(self.R2), "n.a." if self.midpoint is None else self.midpoint,
         ]
 
 
@@ -246,6 +248,7 @@ TSV_HEADER = [
     "TajimaD",
     "FuLiD*", "FuLiF*",
     "Ramos-Onsins_Rozas_R2",
+    "Midpoint",
 ]
 
 
@@ -497,6 +500,7 @@ class CodonUsageStats:
     codon_counts: dict[str, float] = field(default_factory=dict)  # codon → mean count/seq
     rscu: dict[str, float] = field(default_factory=dict)          # codon → RSCU value
     ENC: Optional[float] = None     # 20 (max bias) … 61 (no bias); None if data insufficient
+    per_sequence_enc: dict[str, float | None] = field(default_factory=dict)
 
 
 @dataclass
@@ -757,6 +761,16 @@ class VCFPopulation:
 
 
 _VCF_GAP = "-"
+
+
+
+_WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+def _fs_equivalence_key(name: str) -> str:
+    """Key under which two directory names may address the same entry on a
+    case-insensitive, Unicode-normalising filesystem (macOS, Windows)."""
+    return unicodedata.normalize("NFKC", name).casefold()
 
 
 def _vcf_allele(idx: str, ref: str, alt1: str) -> str:
@@ -1297,6 +1311,12 @@ def _get_biallelic_positions(seqs: list[str]) -> list[tuple[int, str, str]]:
             continue
         alleles = sorted(counts.keys(), key=lambda a: counts[a])
         minor, major = alleles[0], alleles[1]
+        if counts[minor] == counts[major]:
+            # Tied frequencies: DnaSP (CODIGO2.vb::calculo_mas_freq1) makes the
+            # first sequence's allele "allele 1" when its count is >= n/2, so
+            # the other allele plays the minor role and D keeps DnaSP's sign.
+            major = col[0]
+            minor = next(a for a in alleles if a != major)
         result.append((pos, minor, major))
     return result
 
@@ -1534,7 +1554,8 @@ def compute_mismatch(seqs: list[str]) -> MismatchStats:
 
     Computes the observed distribution of pairwise nucleotide differences,
     the raggedness statistic r (Harpending 1994, equation 1), and the
-    coefficient of variation (Rogers & Harpending 1992).
+    unbiased variance over unordered pairs and Sokal & Rohlf's corrected
+    coefficient of variation (PairwiseDiff.vb, lines 565-567 and 732).
 
     Raggedness r quantifies the smoothness of the mismatch distribution.
     Small r → smooth (consistent with population expansion).
@@ -1561,9 +1582,11 @@ def compute_mismatch(seqs: list[str]) -> MismatchStats:
     stats.observed = dict(sorted(obs.items()))
 
     stats.mean = sum(diffs) / len(diffs)
-    variance = sum((d - stats.mean) ** 2 for d in diffs) / len(diffs)
+    variance = (sum((d - stats.mean) ** 2 for d in diffs) / (len(diffs) - 1)
+                if len(diffs) > 1 else 0.0)
     stats.variance = variance
-    stats.cv = math.sqrt(variance) / stats.mean if stats.mean > 0 else None
+    stats.cv = ((1 + 1 / (4 * n)) * math.sqrt(variance) / stats.mean
+                if stats.mean > 0 else None)
 
     # Raggedness (Harpending 1994, eq 1)
     # r = Σ (f(i) - f(i-1))² where f(i) = proportion of pairs with i differences
@@ -3311,12 +3334,16 @@ def _sequence_enc(seq: str, genetic_code: dict[str, str]) -> tuple[Optional[floa
     return min(61.0, value), weight
 
 
-def compute_codon_usage(seqs: list[str], genetic_code: dict[str, str] = GENETIC_CODE) -> CodonUsageStats:
+def compute_codon_usage(
+    seqs: list[str], genetic_code: dict[str, str] = GENETIC_CODE,
+    *, names: list[str] | None = None,
+) -> CodonUsageStats:
     """Mean triplet counts/RSCU including stops; weighted per-sequence ENC.
 
     CodonUsage.vb includes amino-acid family 21 in MuestraRSCU, but excludes
     it in M23ENC. Coding intervals must be selected before calling this method.
     Incomplete trailing codons are rejected; ambiguous/gapped triplets omitted.
+    When names are supplied, retain each sequence's ENC (including undefined).
     """
     result = CodonUsageStats(n=len(seqs))
     if not seqs:
@@ -3334,6 +3361,8 @@ def compute_codon_usage(seqs: list[str], genetic_code: dict[str, str] = GENETIC_
         for codon in codons:
             result.rscu[codon] = raw[codon] * len(codons) / total if total else 0.0
     values = [_sequence_enc(seq, genetic_code) for seq in seqs]
+    if names is not None:
+        result.per_sequence_enc = {name: value for name, (value, _) in zip(names, values)}
     usable = [(v, w) for v, w in values if v is not None and w > 0]
     if usable:
         result.ENC = sum(v * w for v, w in usable) / sum(w for _, w in usable)
@@ -3641,12 +3670,22 @@ def run_analysis(
 
     if window_size > 0 and step_size > 0:
         pos = 0
-        while pos + window_size <= L:
-            slices = [s[pos: pos + window_size] for s in aln.seqs]
-            label = f"{pos + 1}-{pos + window_size}"
-            ws = analyse_region(slices, aln.names, label, window_size)
+        while pos < L:
+            # CODIGO2.vb emits before testing To2 < nucw. CONTROLE.vb caps
+            # both the next start and end (Gaps in Sliding Window = considered).
+            end = min(pos + window_size, L)
+            slices = [s[pos:end] for s in aln.seqs]
+            label = f"{pos + 1}-{end}"
+            ws = analyse_region(slices, aln.names, label, end - pos)
+            clean_positions = [p + 1 for p in range(pos, end)
+                               if all(s[p] in _NUCLEOTIDES for s in aln.seqs)]
+            # CONTROLE.vb::BuscaPuntoMedioWithSynSW (line 126).
+            ws.midpoint = (clean_positions[(len(clean_positions) - 1) // 2]
+                           if clean_positions else pos + 1)
             window_stats.append(ws)
-            pos += step_size
+            if end == L:
+                break
+            pos = min(pos + step_size, L - 1)
 
     results: dict = {
         "genetic_code": genetic_code,
@@ -3760,7 +3799,7 @@ def run_analysis(
 
     if "codon" in analyses:
         if aln.L % 3 == 0:
-            results["codon"] = compute_codon_usage(aln.seqs, genetic_code)
+            results["codon"] = compute_codon_usage(aln.seqs, genetic_code, names=aln.names)
         else:
             print("Warning: codon requires an in-frame alignment", file=sys.stderr)
 
@@ -3829,6 +3868,86 @@ def _ld_significance(p: Optional[float]) -> str:
 # Output writers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _serialise_results(results: dict) -> dict:
+    """JSON-ready view of the results bundle (summary.json and result.json).
+
+    LD pairs have their own TSV; pair lists are omitted from this compact form.
+    Tuple dictionary keys (population pairs) use the runner's JSON encoding.
+    """
+    def serialise(value):
+        if is_dataclass(value):
+            return {f.name: serialise(getattr(value, f.name)) for f in fields(value)
+                    if f.name not in {'pairs', 'incompatible_pairs'}}
+        if isinstance(value, dict):
+            return {json.dumps(k) if isinstance(k, tuple) else str(k): serialise(v)
+                    for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [serialise(v) for v in value]
+        if isinstance(value, (set, frozenset)):
+            return sorted(serialise(v) for v in value)
+        return value
+
+    return {k: serialise(v) for k, v in results.items() if k != 'genetic_code'}
+
+
+def write_summary(output_dir: Path, results: dict) -> Path:
+    """Export the validation runner's summary schema, including named estimates."""
+    path = output_dir / 'summary.json'
+    path.write_text(json.dumps(_serialise_results(results), indent=2, allow_nan=False) + '\n', encoding='utf-8')
+    return path
+
+
+def write_result_envelope(output_dir: Path, src_label: str, input_path: Optional[Path],
+                          results: dict, result_files: list[Path], figs: list[Path],
+                          variant_sites_only: bool = False) -> Path:
+    """Write the result.json envelope (same keys as ClawBio's shared writer).
+
+    ``summary`` carries the headline statistics an agent needs; ``data`` carries
+    the same module summaries as summary.json plus the artifact list. The
+    ClawBio runner, when this package is run there, promotes ``chat_summary_lines`` and ``preferred_artifacts``
+    into its run result, so both are added to the envelope.
+    """
+    write_result_json = _load_repro_writers().write_result_json
+    output_dir = output_dir.resolve()
+    g = results["global"]
+    status = results.get("analysis_status") or {}
+    artifacts = sorted({Path(p).resolve().relative_to(output_dir).as_posix()
+                        for p in [*result_files, *figs] if p})
+
+    def _round(value, digits=6):
+        return None if value is None else round(value, digits)
+
+    summary = {
+        "source": src_label, "n": g.n, "L_total": g.L_total, "L_net": g.L_net,
+        "S": g.S, "Eta": g.Eta, "H": g.H, "Hd": _round(g.Hd), "Pi": _round(g.Pi),
+        "k": _round(g.k), "ThetaW_nuc": _round(g.ThetaW_nuc), "TajimaD": _round(g.TajimaD),
+        "FuLiD_star": _round(g.FuLiD_star), "FuLiF_star": _round(g.FuLiF_star),
+        "R2": _round(g.R2), "variant_sites_only": bool(variant_sites_only),
+        "windows": len(results.get("windows") or []),
+        "analyses_completed": list(status.get("completed", [])),
+        "analyses_skipped": status.get("skipped", []),
+    }
+    data = _serialise_results(results)
+    data["artifacts"] = artifacts
+    checksum = (hashlib.sha256(input_path.read_bytes()).hexdigest()
+                if input_path and input_path.is_file() else "")
+    datasets = {"input": input_path.name if input_path else src_label}
+    path = write_result_json(output_dir, "dnasp", __version__, summary, data,
+                             input_checksum=checksum, datasets=datasets, status="ok", ok=True)
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    pi = "n.a." if g.Pi is None else f"{g.Pi:.5f}"
+    tajima = "n.a." if g.TajimaD is None else f"{g.TajimaD:.4f}"
+    envelope["chat_summary_lines"] = [
+        f"DnaSP {_display_label(src_label)}: n = {g.n}, net sites {g.L_net}, S = {g.S}, pi = {pi}, Tajima's D = {tajima}.",
+        "Analyses completed: " + (", ".join(summary["analyses_completed"]) or "none") + ".",
+    ]
+    envelope["preferred_artifacts"] = (
+        [a for a in ("report.md", "summary.json", "results.tsv") if a in artifacts]
+        + [a for a in artifacts if a.startswith("figures/")])
+    path.write_text(json.dumps(envelope, indent=2, default=str) + "\n", encoding="utf-8")
+    return path
+
+
 def write_tsv(
     output_dir: Path,
     source_name: str,
@@ -3837,7 +3956,7 @@ def write_tsv(
     variant_sites_only: bool = False,
 ) -> Path:
     tsv_path = output_dir / "results.tsv"
-    with open(tsv_path, "w", newline="") as fh:
+    with open(tsv_path, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["DnaSP-Python", "Source:", source_name, "Date:", datetime.now().strftime("%Y-%m-%d %H:%M")])
         if variant_sites_only:
@@ -3855,7 +3974,7 @@ def write_tsv(
 def write_ld_tsv(output_dir: Path, ld: LDStats) -> Path:
     """Write LD pairwise results as TSV."""
     path = output_dir / "ld_pairs.tsv"
-    with open(path, "w", newline="") as fh:
+    with open(path, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["Site1", "Site2", "Dist", "n", "D", "D_prime", "R2", "Chi2", "P_chi2", "Sig"])
         for p in ld.pairs:
@@ -4015,8 +4134,8 @@ def write_report(
             "|-----------|-------|-----------|",
             f"| Number of pairs | {popsize.n_pairs} | |",
             f"| Mean pairwise differences | {_fmt(popsize.mean, 4)} | |",
-            f"| Variance | {_fmt(popsize.variance, 4)} | |",
-            f"| CV (coefficient of variation) | {_fmt(popsize.cv, 4)} | Rogers & Harpending 1992 |",
+            f"| Observed variance of k (unbiased over pairs, as DnaSP) | {_fmt(popsize.variance, 4)} | PairwiseDiff.vb |",
+            f"| C.V. of k (Sokal & Rohlf unbiased correction, as DnaSP) | {_fmt(popsize.cv, 4)} | Sokal & Rohlf |",
             f"| Raggedness r | {_fmt(popsize.raggedness, 6)} | Harpending 1994 |",
             "",
             "**Mismatch distribution** (differences → pair count):",
@@ -4349,6 +4468,13 @@ def write_report(
                 bias_note = "**Weak or no codon usage bias** (ENC ≥ 50; close to 61)."
             lines += [f"> {bias_note}", ""]
 
+        if codon_s.per_sequence_enc:
+            lines += ["### Per-sequence ENC", "", "| Sequence | ENC |", "|----------|-----|"]
+            for name, enc in codon_s.per_sequence_enc.items():
+                label = name.replace('|', r'\|')
+                lines.append(f"| {label} | {_fmt(enc, 3)} |")
+            lines.append("")
+
         # RSCU table  -  group by amino acid family (under the genetic code
         # this run used, not always the standard-code grouping: e.g. under
         # vertebrate-mitochondrial, TGA joins Trp and ATA joins Met).
@@ -4464,12 +4590,12 @@ def write_report(
                 "",
             ]
         lines += [
-            "| Region | S | π | Tajima D |",
-            "|--------|---|---|---------|",
+            "| Region | Midpoint | S | π | Tajima D |",
+            "|--------|----------|---|---|---------|",
         ]
         for ws in window_stats:
             lines.append(
-                f"| {ws.region} | {ws.S} | {_fmt(ws.Pi, 5)} | {_fmt(ws.TajimaD, 4)} |"
+                f"| {ws.region} | {ws.midpoint} | {ws.S} | {_fmt(ws.Pi, 5)} | {_fmt(ws.TajimaD, 4)} |"
             )
         lines.append("")
 
@@ -4533,6 +4659,65 @@ def write_report(
     return report_path
 
 
+def _display_label(text: str, limit: int = 80) -> str:
+    """Bounded, markup-free label for chat lines built from user-controlled names.
+
+    Control characters (including newlines and tabs) are removed, Markdown and
+    HTML punctuation is dropped (underscores are kept: they are common in file
+    and CHROM names), whitespace is collapsed and the result is truncated, so a
+    file or CHROM name cannot inject chat content.
+    """
+    cleaned = "".join(ch for ch in str(text) if ch.isprintable() and ch not in '*`[]<>|#\\')
+    cleaned = " ".join(cleaned.split())
+    if len(cleaned) > limit:
+        cleaned = cleaned[:limit - 3].rstrip() + "..."
+    return cleaned or "input"
+
+
+def write_multi_result_envelope(output_dir: Path, vcf_path: Path, sub_dirs: dict[str, Path]) -> Path:
+    """Root result.json for a multi-CHROM VCF run (one analysis per subdirectory).
+
+    A runner such as ClawBio's reads only <output_dir>/result.json, so the per-CHROM
+    envelopes are summarised here with paths relative to the output directory.
+    """
+    write_result_json = _load_repro_writers().write_result_json
+    output_dir = output_dir.resolve()
+    runs: dict[str, dict] = {}
+    artifacts: list[str] = []
+    chat: list[str] = [f"DnaSP {_display_label(vcf_path.name)}: {len(sub_dirs)} chromosomes analysed separately."]
+    preferred: list[str] = []
+    for chrom, sub in sub_dirs.items():
+        rel = Path(sub).resolve().relative_to(output_dir).as_posix()
+        envelope_path = Path(sub) / "result.json"
+        entry: dict = {"chrom": chrom, "directory": rel}
+        if envelope_path.is_file():
+            child = json.loads(envelope_path.read_text(encoding="utf-8"))
+            entry["summary"] = child.get("summary", {})
+            entry["artifacts"] = [f"{rel}/{a}" for a in child.get("data", {}).get("artifacts", [])]
+            artifacts.extend(entry["artifacts"] + [f"{rel}/result.json"])
+            preferred.append(f"{rel}/report.md")
+            g = entry["summary"]
+            pi = "n.a." if g.get("Pi") is None else f"{g['Pi']:.5f}"
+            tajima = "n.a." if g.get("TajimaD") is None else f"{g['TajimaD']:.4f}"
+            chat.append(f"{_display_label(chrom)}: n = {g.get('n')}, variant sites {g.get('L_net')}, "
+                        f"S = {g.get('S')}, pi = {pi}, Tajima's D = {tajima}.")
+        runs[rel] = entry
+    summary = {"source": vcf_path.name, "chromosomes": len(sub_dirs), "variant_sites_only": True,
+               "runs": [{"chrom": e["chrom"], "directory": e["directory"],
+                         **{k: e.get("summary", {}).get(k) for k in ("n", "L_net", "S", "Pi", "TajimaD")}}
+                        for e in runs.values()]}
+    data = {"runs": runs, "artifacts": sorted(set(artifacts))}
+    checksum = hashlib.sha256(vcf_path.read_bytes()).hexdigest() if vcf_path.is_file() else ""
+    path = write_result_json(output_dir, "dnasp", __version__, summary, data,
+                             input_checksum=checksum, datasets={"input": vcf_path.name},
+                             status="ok", ok=True)
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    envelope["chat_summary_lines"] = chat
+    envelope["preferred_artifacts"] = [a for a in preferred if a in data["artifacts"]]
+    path.write_text(json.dumps(envelope, indent=2, default=str) + "\n", encoding="utf-8")
+    return path
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Figures
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4552,14 +4737,7 @@ def make_figures(output_dir: Path, results: dict) -> list[Path]:
 
     # Sliding window: π and Tajima's D
     if window_stats:
-        regions = [ws.region for ws in window_stats]
-        midpoints = []
-        for r in regions:
-            parts = r.split("-")
-            try:
-                midpoints.append((int(parts[0]) + int(parts[1])) / 2)
-            except (IndexError, ValueError):
-                midpoints.append(0)
+        midpoints = [ws.midpoint for ws in window_stats]
         pi_vals = [ws.Pi for ws in window_stats]
         d_vals = [ws.TajimaD if ws.TajimaD is not None else float("nan") for ws in window_stats]
         fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
@@ -4569,7 +4747,10 @@ def make_figures(output_dir: Path, results: dict) -> list[Path]:
         axes[1].plot(midpoints, d_vals, color="#d6604d", linewidth=1.5)
         axes[1].axhline(0, color="grey", linewidth=0.8, linestyle="--")
         axes[1].set_ylabel("Tajima's D")
-        axes[1].set_xlabel("Position (bp)")
+        # VCF windows run over retained variant columns, so their midpoints are
+        # SNP indices, not genomic POS values; say so on the axis itself.
+        axes[1].set_xlabel("Retained variant index (SNP index, not bp)"
+                           if results.get("variant_sites_only") else "Position (bp)")
         plt.tight_layout()
         fig_path = figs_dir / "sliding_window.png"
         plt.savefig(fig_path, dpi=150)
@@ -5093,7 +5274,7 @@ def _run(
     tsv = write_tsv(output_dir, src_label, rs, results["windows"],
                     variant_sites_only=variant_sites_only)
 
-    result_files = [tsv]
+    result_files = [tsv, write_summary(output_dir, results)]
     if ld is not None and ld.pairs:
         ld_tsv = write_ld_tsv(output_dir, ld)
         result_files.append(ld_tsv)
@@ -5108,6 +5289,8 @@ def _run(
                           kaks_used_outgroup=(outgroup_seq is not None
                                               and results.get("kaks") is not None))
     result_files.append(report)
+    result_files.append(write_result_envelope(output_dir, src_label, input_path, results,
+                                              result_files, figs, variant_sites_only))
 
     write_reproducibility(output_dir, input_path, cli_args, result_files, results.get("analysis_status"))
 
@@ -5319,12 +5502,32 @@ def _main(argv: Optional[list[str]] = None) -> int:
         sub_dirs: dict[str, Path] = {}
         if multi:
             taken: dict[str, str] = {}
+            output_root = args.output.resolve()
             for chrom in vcf.alignments:
-                safe = re.sub(r"[^\w.-]", "_", chrom) or "chrom"
-                if taken.get(safe, chrom) != chrom:
-                    safe = f"{safe}_{hashlib.sha1(chrom.encode()).hexdigest()[:6]}"
-                taken[safe] = chrom
-                sub_dirs[chrom] = args.output / safe
+                # Leading/trailing dots are dropped so "." and ".." (valid CHROM
+                # tokens) cannot name the root or its parent; empty names are hashed.
+                digest = hashlib.sha1(chrom.encode()).hexdigest()
+                safe = re.sub(r"[^\w.-]", "_", chrom).strip(".") or f"chrom_{digest[:6]}"
+                # Windows also reserves the superscript forms (COM¹, LPT³); NFKC folds them.
+                if unicodedata.normalize("NFKC", safe).split(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
+                    safe = f"chrom_{safe}"
+                # Names are reserved under a filesystem-equivalence key (NFKC,
+                # case-folded), so chr1/CHR1 or two Unicode forms of one name
+                # never share a directory on macOS or Windows; a sanitised or
+                # hash-suffixed name may also equal another CHROM's literal
+                # name, so the suffix is lengthened until the key is unused.
+                candidate, length = safe, 6
+                while _fs_equivalence_key(candidate) in taken and taken[_fs_equivalence_key(candidate)] != chrom:
+                    candidate = (f"{safe}_{digest[:length]}" if length <= len(digest)
+                                 else f"{safe}_{digest}_{length - len(digest)}")
+                    length += 2
+                taken[_fs_equivalence_key(candidate)] = chrom
+                child = args.output / candidate
+                if child.resolve().parent != output_root:
+                    raise ValueError(f"CHROM {chrom!r} cannot be mapped to a directory inside {args.output}")
+                sub_dirs[chrom] = child
+            if len({_fs_equivalence_key(p.name) for p in sub_dirs.values()}) != len(sub_dirs):
+                raise ValueError("CHROM output directories are not unique on a case-insensitive filesystem")
 
         for chrom, chrom_aln in vcf.alignments.items():
             sub = sub_dirs.get(chrom, args.output)
@@ -5346,13 +5549,24 @@ def _main(argv: Optional[list[str]] = None) -> int:
                         file=sys.stderr,
                     )
             print(f"\n=== {chrom}  ({chrom_aln.n} haplotypes x {chrom_aln.L} variant sites) ===")
+            # Each child's reproducibility record replays that CHROM only.
+            child_args = (cli_args if any(a == "--region" or a.startswith("--region=") for a in cli_args)
+                          else [*cli_args, "--region", chrom])
             _run(
                 args.vcf, sub, args.window, step,
-                analyses, chrom_pops, aln2, cli_args,
+                analyses, chrom_pops, aln2, child_args,
                 outgroup_name=args.outgroup, hka_loci=hka_loci,
                 preloaded_aln=chrom_aln, source_name=f"{args.vcf.name}#{chrom}",
                 variant_sites_only=True, genetic_code=genetic_code,
             )
+        if multi:
+            # A runner reads only <output>/result.json: summarise the per-CHROM runs there,
+            # then give the split run its own bundle (replays the whole run; checksums cover
+            # the root envelope and every child file).
+            root = write_multi_result_envelope(args.output, args.vcf, sub_dirs)
+            write_reproducibility(args.output, args.vcf, cli_args, [root],
+                                  {"mode": "multi-chrom", "chromosomes": list(sub_dirs)})
+            print(f"  Root envelope: {root}")
         return 0
 
     if not args.input and hka_loci and analyses == {'polymorphism', 'hka'}:
@@ -5376,9 +5590,30 @@ def _main(argv: Optional[list[str]] = None) -> int:
     return 0
 
 
+def _tolerate_unencodable_console() -> None:
+    """Escape characters the console cannot encode instead of failing.
+
+    Redirected stdout and stderr on Windows (as when an agent captures them) use
+    the ANSI code page, usually cp1252, which has no pi, eta or theta. Printing
+    the summary would raise UnicodeEncodeError and end the run with exit code 1.
+    Such streams keep their encoding but escape what it cannot represent
+    (for example \\u03c0); UTF-8 streams are left untouched.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "").replace("_", "")
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None or encoding in ("utf8", "utf8sig"):
+            continue
+        try:
+            reconfigure(errors="backslashreplace")
+        except (ValueError, OSError):
+            pass
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """CLI boundary: invalid scientific inputs yield concise diagnostics."""
     try:
+        _tolerate_unencodable_console()
         return _main(argv)
     except (ValueError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

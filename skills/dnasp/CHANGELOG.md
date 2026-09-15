@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - unreleased
+
+Round-5 DnaSP 6.12.03 validation fixes; version bumped so that the three skill trees (ClawBio,
+the canonical DnaSP mirror and this package) no longer share 0.5.1 with different algorithms.
+
+### Changed (validation round 5, DnaSP 6.12.03, 2026-09-15; ported from the ClawBio tree)
+- Sliding windows now follow DnaSP's placement (`CODIGO2.vb`, `CONTROLE.vb`): the next start
+  advances by the step and is capped at the alignment length, the window end is capped there too,
+  the first window reaching the end terminates the loop (so the final truncated window is kept),
+  and each window carries DnaSP's `Midpoint` (the ceil(net/2)-th gap-free column, or the window
+  start when the window has none) in `results.tsv`, `summary.json`, the report and the figure. VCF
+  window plots label their axis as retained variant index, not bp.
+- Mismatch distribution: observed variance of k is the unbiased variance over sequence pairs and
+  the C.V. carries Sokal & Rohlf's (1 + 1/4n) correction, as in `PairwiseDiff.vb`
+  (rp49 40.7780 / 0.3987; DmelOSRegion 7298.4971 / 1.3168).
+- Codon usage exports a named per-sequence ENC (`codon.per_sequence_enc`, outgroup excluded,
+  undefined as null) alongside the weighted summary ENC.
+- Every run writes `summary.json` (module summaries; LD pair grids stay in `ld_pairs.tsv`) and
+  `result.json` (the structured envelope ClawBio's runner reads, written by `_repro_writers.py`
+  with the same keys as the shared ClawBio writer); both declared in `SKILL.md`. Multi-CHROM VCF
+  runs add a root envelope summarising the per-CHROM runs; file and CHROM names are sanitised
+  before they appear in chat lines. Console output tolerates non-UTF-8 terminals (Windows cp1252) and
+  result files are written as UTF-8.
+- LD: at tied allele frequencies the first sequence's allele is the reference, as in DnaSP's
+  `calculo_mas_freq1`, so the sign of D matches DnaSP's grids (|D|, |D'| and r^2 unchanged).
+- Tests: `test_validation5_regressions.py` (round-5 capture regressions, including the
+  Segregating-sites setting of Fu and Li's tests, the LD sign rule and the result.json envelope) and `test_windows_encoding.py`; fixtures for
+  the round-5 inputs and the transcribed per-sequence ENC tables.
+
 ## [0.5.1] - unreleased
 
 Not yet published to ClawHub or Hermes: awaiting a validated DnaSP release.

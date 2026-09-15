@@ -83,3 +83,31 @@ def write_checksums(paths: list[Path], output_dir: Path | str,
                 pass
         entries.append(f"{_sha256(item)}  {label}\n")
     return _write_lf(_bundle_dir(output_dir) / "checksums.sha256", "".join(entries))
+
+
+def write_result_json(output_dir: Path | str, skill: str, version: str, summary: dict,
+                      data: dict, input_checksum: str = "", datasets: dict | None = None,
+                      status: str | None = None, ok: bool | None = None) -> Path:
+    """Write the result.json envelope with the same keys as ClawBio's shared writer.
+
+    Kept here so a standalone run produces the same structured file that the
+    ClawBio runner reads (status, ok, skill, version, completed_at,
+    input_checksum, datasets, summary, data).
+    """
+    import json
+    from datetime import datetime, timezone
+    envelope: dict = {}
+    if status is not None:
+        envelope["status"] = status
+    if ok is not None:
+        envelope["ok"] = ok
+    envelope.update({
+        "skill": skill,
+        "version": version,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "input_checksum": f"sha256:{input_checksum}" if input_checksum else "",
+        "datasets": datasets or {},
+        "summary": summary,
+        "data": data,
+    })
+    return _write_lf(Path(output_dir) / "result.json", json.dumps(envelope, indent=2, default=str) + "\n")

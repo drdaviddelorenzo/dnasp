@@ -1,6 +1,6 @@
 # DnaSP statistical reference
 
-Version 0.5.1 implements 16 selected population-genetic analysis modules. Its
+Version 0.5.2 implements 16 selected population-genetic analysis modules. Its
 methods combine published estimators with documented DnaSP 6 implementation
 conventions. Agreement on the validation datasets does not establish equivalence
 for every DnaSP mode, input or statistic.
@@ -63,7 +63,13 @@ fraction of clean nucleotide characters that are G or C.
 
 Tajima's D uses k and S with the Tajima (1989) variance. Fu and Li D*/F* use the
 standard Simonsen et al. (1995) variance convention, with the DnaSP singleton-site
-count capped at one per site. R2 follows the DnaSP caller's S denominator, not
+count capped at one per site. D*/F* and outgroup D/F mirror **Data > Segregating
+Sites/Mutations = Segregating sites**: compare the v5-style Segregating-sites
+panels (the second panels in `A_rp49_all.out`). Substituting eta=92 for S=89
+reproduces that capture's rp49 Eta D*/F*, but is not a general Eta-mode rule:
+`FULI.vb` also changes singleton and external-mutation capping through the
+`SingleMut` and `ExternaMut` subtractions. The default is unchanged and there is
+no Eta-mode switch. R2 follows the DnaSP caller's S denominator, not
 Eta. Small-sample, monomorphic and zero-denominator cases can be undefined.
 Signed neutrality statistics are descriptive; uncalibrated cutoffs do not supply
 P-values. `theta-L` belongs to Fay-Wu, not this module.
@@ -75,6 +81,11 @@ pairs. It reports D, normalised D', R2, chi-square and its one-degree-of-freedom
 P-value. ZnS is mean R2 over all pairs; Za is mean R2 over adjacent eligible
 sites; ZZ = Za - ZnS. These LD association P-values are distinct from neutrality
 P-values.
+
+The sign of D and D' follows DnaSP's allele ordering (`CODIGO2.vb::calculo_mas_freq1`):
+the major allele is the reference, and when the two alleles are equally frequent
+the first analysed sequence's allele takes that role. |D|, |D'| and R2 do not
+depend on the ordering.
 
 Site1/Site2 retain original, one-based alignment columns. DnaSP's inline LD loop
 in `CODIGO2.vb` calculates Dist as CInt(j-i-gap_count/n), with gaps summed across
@@ -101,8 +112,13 @@ coordinates does not change the incompatibility counts or Rm.
 ### Population size changes
 
 `popsize` reports the pairwise mismatch distribution, mean, variance,
-coefficient of variation and Harpending raggedness. Its distribution is computed
-from the cleaned ingroup. It does not fit a demographic model or compute a
+coefficient of variation and Harpending (1994, equation 1) raggedness. Its
+distribution is computed from the cleaned ingroup. Variance is the sum of
+squared deviations from the mean divided by (number of unordered pairs minus
+1), or zero for two sequences. CV is `(1 + 1/(4n)) * sqrt(variance) / mean`,
+where n is the number of sequences, following DnaSP's Sokal & Rohlf correction
+(`PairwiseDiff.vb`, lines 565-567 and 732); CV is undefined for a zero mean.
+It does not fit a demographic model or compute a
 coalescent P-value. A smooth or ragged curve alone does not identify a population
 history.
 
@@ -223,10 +239,17 @@ Unusable family homozygosities are omitted; a missing three-fold estimate may
 be interpolated from the two- and four-fold classes. The source cap at 61 is
 retained. Stop codons are excluded from ENC. Missing required class estimates
 remain undefined; pooling sequences before estimating ENC is not equivalent.
+`summary.json` exports `codon.per_sequence_enc`, mapping each analysed sequence
+name to ENC or JSON null; the report includes the same values at three decimals.
+An explicitly selected outgroup is excluded. The summary ENC remains the
+synonymous-codon-weighted mean.
 
 For the 11-sequence COII ingroup restricted to 1-681, independent source-derived
 weighted means are 46.977002 (standard) and 46.780546 (vertebrate mitochondrial).
-These are new validation targets, not new captured GUI observations.
+The round-5 `M_ENC_standard.out` and `M_ENC_vertebrate-mitochondrial.out`
+summaries agree at three decimals. The 11 + 11 per-sequence values are checked
+against the labelled `M_ENC_*_GUI_tables_transcribed.txt` files; those tables
+are operator-screen transcriptions, not DnaSP file exports.
 
 ### Fay-Wu and Zeng summaries
 
@@ -238,10 +261,20 @@ use this same eligible set. The module does not supply normalised-test P-values.
 
 ## Windows and reproducibility
 
-`--window` and `--step` compute polymorphism summaries for complete windows only.
-Coordinates are one-based inclusive intervals; output labels are not DnaSP GUI
-midpoints. On VCF, windows contain retained variant records, not genomic bases.
-No claim is made that every DnaSP window-selection mode is reproduced.
+`--window` and `--step` mirror **Gaps in Sliding Window = considered**. Coordinates
+are one-based inclusive: start at 1, advance by the step with the next start
+capped at alignment length L, and use `end = min(start + window - 1, L)`.
+Stop after the first window reaching L, retaining that truncated window and
+its actual length. Windows with no analysable sites are kept. This follows
+`CODIGO2.vb` and `CONTROLE.vb::BuscaDesplazamientoSW/BuscaTamanyoVentanaSW`.
+The not-considered mode, which discounts gaps in placement, is not implemented.
+
+`Midpoint` in `results.tsv`, `midpoint` in each `summary.json` window and the
+report table give the alignment position of the ceil(net/2)-th gap-free column,
+or the window start when none exists (`CONTROLE.vb::BuscaPuntoMedioWithSynSW`).
+The window figure uses these midpoints on its x axis. On VCF, windows contain
+retained variant records, not genomic bases, and also retain the final partial
+window. Tajima's D remains undefined for S=0 windows even when DnaSP prints 0.0000.
 
 Explicitly requested analyses fail with a non-zero exit when prerequisites are
 missing. `all` runs applicable analyses and records skipped modules/reasons in
@@ -250,7 +283,16 @@ data are not the same as failed input validation. Non-empty output destinations
 are rejected to prevent stale figures and overwritten reports.
 
 `results.tsv` contains polymorphism and windows only. Other modules are reported
-in Markdown; LD also has `ld_pairs.tsv`. The reproducibility folder is written by
+in Markdown and `summary.json`; LD also has `ld_pairs.tsv` (pair grids are
+omitted from the JSON summary). `result.json` is the structured envelope with the
+same keys as ClawBio's (skill, version, input checksum, a headline summary, the
+`summary.json` payload with the artifact list, chat lines and preferred
+artifacts); it is written before the reproducibility bundle so the checksums
+cover it. A multi-CHROM VCF run (no `--region`, no `--vcf-merge`) writes one
+envelope per CHROM directory and a root `result.json` listing each run's headline
+statistics and artifacts by relative path. Names taken from input files or CHROM
+identifiers are stripped of control characters and markup before they appear in
+chat lines. The reproducibility folder is written by
 `_repro_writers.py` beside `dnasp.py` and records the actual arguments, versions, archived input bytes,
 analysis status and output-relative hashes. `commands.sh` quotes arguments and
 writes to a fresh replay destination, but assumes the recorded interpreter and
