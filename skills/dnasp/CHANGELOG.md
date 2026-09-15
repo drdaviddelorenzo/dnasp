@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.2] - unreleased
+## [0.5.2] - 2026-09-15
 
 Round-5 DnaSP 6.12.03 validation fixes; version bumped so that the three skill trees (ClawBio,
 the canonical DnaSP mirror and this package) no longer share 0.5.1 with different algorithms.
@@ -35,6 +35,10 @@ the canonical DnaSP mirror and this package) no longer share 0.5.1 with differen
 - Tests: `test_validation5_regressions.py` (round-5 capture regressions, including the
   Segregating-sites setting of Fu and Li's tests, the LD sign rule and the result.json envelope) and `test_windows_encoding.py`; fixtures for
   the round-5 inputs and the transcribed per-sequence ENC tables.
+
+### Fixed
+- The filename sanitisation test no longer creates a file name that Windows rejects (tab,
+  asterisk, angle brackets); the adversarial string is checked directly on `_display_label`.
 
 ## [0.5.1] - unreleased
 
