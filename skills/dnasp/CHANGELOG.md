@@ -41,6 +41,14 @@ Not yet published to ClawHub or Hermes: awaiting a validated DnaSP release.
   verification and a bash replay of `commands.sh` on Ubuntu and Windows with Python 3.10 and
   3.13, plus an Ubuntu job without matplotlib. The Windows jobs run in Python's UTF-8 mode
   (`PYTHONUTF8=1`); see Known issues.
+- `.github/workflows/publish-clawhub.yml` and `.github/scripts/` (repository root): publish to
+  ClawHub at exactly the version recorded in the skill, instead of ClawHub's automatic numbering
+  (1.0.0 for a new skill, then the next patch). The workflow checks that the four version fields
+  agree, requires a dated `CHANGELOG.md` entry for a real publish, refuses a version that is not
+  greater than ClawHub's latest, and succeeds only when ClawHub lists the version as published and
+  lets it be downloaded, waiting up to ten minutes for security checks. A re-run never uploads identical content again and reports
+  whether the version became public or was blocked. Covered by `.github/scripts/test_clawhub_scripts.py`,
+  which runs in CI.
 
 ### Known issues
 - Windows without UTF-8 mode: when stdout is redirected (as when an agent captures it), Python uses

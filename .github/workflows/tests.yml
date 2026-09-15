@@ -78,3 +78,19 @@ jobs:
           assert first and first == replay, "replayed results.tsv differs from the original run"
           print("commands.sh replay matches the original run")
           EOF
+
+  publish-scripts:
+    name: ClawHub publish scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: python -m pip install "pytest>=7.0" "pyyaml==6.0.2"
+
+      - name: Test the ClawHub publish scripts
+        run: python -m pytest .github/scripts -q

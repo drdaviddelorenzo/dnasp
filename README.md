@@ -81,17 +81,28 @@ directory. Moving this folder breaks both.
 
 ## Publishing (after a validated release)
 
-**Bump the `version` in `SKILL.md` frontmatter (both the top-level and `metadata.version`
-fields), in `dnasp.py` (`__version__`) and in `CHANGELOG.md` for every published change.**
+**Bump the version for every published change**, in all four places: `SKILL.md` frontmatter
+(`version` and `metadata.version`), `__version__` in `dnasp.py`, and a new `CHANGELOG.md` entry
+dated `YYYY-MM-DD`.
 
 | Target | How it is fed | To update |
 |---|---|---|
-| **ClawHub** | ClawHub's GitHub importer, reading `skills/dnasp/` | re-run the import after a release |
+| **ClawHub** | `.github/workflows/publish-clawhub.yml`, run by hand | run it as a dry run, then for real |
 | **Hermes skills hub** | `hermes skills tap add drdaviddelorenzo/dnasp` | `hermes skills update` |
 
-Both routes read a public repository, so this repository must be made public before either works.
-`.github/workflows/publish-clawhub.yml` offers token-based publishing instead; it runs only by hand
-and only once a `CLAWHUB_TOKEN` secret is configured.
+The ClawHub workflow publishes exactly the version recorded in the skill. It stops if the four
+version numbers disagree, if the `CHANGELOG.md` entry is undated, or if the version is not greater
+than ClawHub's latest. A run succeeds only once ClawHub lists that version as published and
+lets it be downloaded: after publishing, it waits up to ten minutes for ClawHub's security checks, and fails if they are still
+running at that point or the release was blocked. Re-running it never uploads identical content
+again; it reports whether the version has since become public or was blocked. Real publishes need
+a `CLAWHUB_TOKEN` repository secret (from `clawhub login --device`).
+
+Do not publish this skill with ClawHub's web importer or its reusable `skill-publish.yml` workflow:
+both choose the version number themselves (1.0.0 for a new skill, then the next patch) and ignore
+`SKILL.md`.
+
+Hermes reads the repository directly, so it must be public before the tap works.
 
 ## Citation
 
