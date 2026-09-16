@@ -31,6 +31,20 @@ Answers the ClawBio maintainer review of the DnaSP pull request; ported from the
   root envelope's path or receives the root reproducibility bundle; it gets its own `chrom_`
   directory.
 
+## [0.5.3] - 2026-09-16
+
+### Fixed
+
+- Every input in the skill metadata now names the command-line flag it maps to
+  (`cli_flag`). Without it an agent reading only the registered metadata had to
+  guess, and two independent models turned `window_size` into the non-existent
+  `--window-size`. Guarded by `tests/test_skill_contract.py`.
+
+### Unchanged
+
+- Numerical behaviour is identical to 0.5.2, the version compared with
+  DnaSP 6.12.03. No statistic changes.
+
 ## [0.5.2] - 2026-09-15
 
 Round-5 DnaSP 6.12.03 validation fixes; version bumped so that the three skill trees (ClawBio,
