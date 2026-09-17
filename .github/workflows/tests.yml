@@ -1,7 +1,7 @@
 # Runs the dnasp test suite and a demo replay on Linux and Windows.
 #
-# The runners install nothing but pytest and matplotlib, so a passing run also shows the skill is
-# self-contained.
+# The runners install nothing but pytest, PyYAML (read only by the SKILL.md contract tests) and
+# matplotlib, so a passing run also shows the skill is self-contained.
 # The no-matplotlib job checks the claim in SKILL.md and README that matplotlib is optional.
 
 name: Tests
@@ -44,7 +44,7 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Install test dependencies
-        run: python -m pip install "pytest>=7.0"
+        run: python -m pip install "pytest>=7.0" "pyyaml>=6.0"
 
       - name: Install matplotlib
         if: ${{ !matrix.no-mpl }}
