@@ -10,15 +10,16 @@ The skill itself lives in **[`skills/dnasp/`](skills/dnasp/)**. See
 [`SKILL.md`](skills/dnasp/SKILL.md) for the agent-facing instructions and
 [`docs/index.md`](skills/dnasp/docs/index.md) for the statistical reference.
 
-> **Status:** version 0.5.3. Published on ClawHub at
-> [drdaviddelorenzo/skills/dnasp](https://clawhub.ai/drdaviddelorenzo/skills/dnasp), imported
-> from this repository. Not yet on Hermes.
+> **Status:** version 0.5.3, published on ClawHub at
+> [drdaviddelorenzo/skills/dnasp](https://clawhub.ai/drdaviddelorenzo/skills/dnasp). Not yet on
+> Hermes.
 >
-> ClawHub lists that release under its own version number, not this skill's: its web importer,
-> like `clawhub skill publish` without `--version`, numbers a new skill 1.0.0 and each later
-> import as the next patch, whatever `SKILL.md` says. Publishing through
-> [`publish-clawhub.yml`](.github/workflows/publish-clawhub.yml) instead pins the recorded
-> version, and needs the `CLAWHUB_TOKEN` repository secret.
+> Earlier ClawHub releases numbered 0.1.x predate 0.5.3 and carry that registry's own numbering:
+> ClawHub's GitHub importer, like `clawhub skill publish` without `--version`, numbers a new
+> skill 1.0.0 and each later import as the next patch, whatever `SKILL.md` says. To publish
+> under the skill's recorded version, upload the bundle directly and set the version by hand, or
+> run [`publish-clawhub.yml`](.github/workflows/publish-clawhub.yml), which pins it and needs
+> the `CLAWHUB_TOKEN` repository secret.
 
 ## Where the skill is developed
 
