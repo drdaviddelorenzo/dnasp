@@ -10,9 +10,10 @@ The skill itself lives in **[`skills/dnasp/`](skills/dnasp/)**. See
 [`SKILL.md`](skills/dnasp/SKILL.md) for the agent-facing instructions and
 [`docs/index.md`](skills/dnasp/docs/index.md) for the statistical reference.
 
-> **Status:** version 0.5.3, published on ClawHub at
-> [drdaviddelorenzo/skills/dnasp](https://clawhub.ai/drdaviddelorenzo/skills/dnasp). Not yet on
-> Hermes.
+> **Status:** version 0.6.0 in this repository, adding coalescent-simulation P-values for
+> Tajima's D, R2 and Fu's Fs (`--n-sim`). ClawHub serves 0.5.3 at
+> [drdaviddelorenzo/skills/dnasp](https://clawhub.ai/drdaviddelorenzo/skills/dnasp) until 0.6.0
+> is uploaded. Not yet on Hermes.
 >
 > Earlier ClawHub releases numbered 0.1.x predate 0.5.3 and carry that registry's own numbering:
 > ClawHub's GitHub importer, like `clawhub skill publish` without `--version`, numbers a new

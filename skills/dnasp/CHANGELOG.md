@@ -31,6 +31,27 @@ Answers the ClawBio maintainer review of the DnaSP pull request; ported from the
   root envelope's path or receives the root reproducibility bundle; it gets its own `chrom_`
   directory.
 
+## [0.6.0] - 2026-09-17
+
+### Added
+
+- Coalescent-simulation P-values for Tajima's D (two-tailed), Ramos-Onsins and
+  Rozas R2 and Fu's Fs (lower tail) over the whole region: `--n-sim`,
+  `--sim-given S|theta` and `--sim-seed`. The null is the Kingman coalescent with
+  constant size, infinite sites and no recombination, conditioned by default on the
+  observed number of segregating sites. Opt-in: without `--n-sim` no simulation
+  runs and no statistic changes. Two sequences give R2 and Fu's Fs P-values; only
+  Tajima's D needs three. Each P-value is (b + 1)/(N + 1) for b of N valid
+  replicates at least as extreme, so none is zero (Phipson and Smyth 2010); the
+  counts b are stored, from which DnaSP's proportion b/N follows.
+
+### Changed
+
+- The report no longer turns Tajima's D or R2 into a significance claim from a
+  fixed threshold; they are described as not assessed unless `--n-sim` supplies a
+  P-value. No statistic changes.
+- The version history moved from SKILL.md to `docs/version_history.md`.
+
 ## [0.5.3] - 2026-09-16
 
 ### Fixed
