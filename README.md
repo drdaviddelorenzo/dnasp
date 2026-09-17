@@ -10,8 +10,15 @@ The skill itself lives in **[`skills/dnasp/`](skills/dnasp/)**. See
 [`SKILL.md`](skills/dnasp/SKILL.md) for the agent-facing instructions and
 [`docs/index.md`](skills/dnasp/docs/index.md) for the statistical reference.
 
-> **Status:** version 0.5.2, not yet published to ClawHub or Hermes. Publication waits for a
-> validated DnaSP release.
+> **Status:** version 0.5.3. Published on ClawHub at
+> [drdaviddelorenzo/skills/dnasp](https://clawhub.ai/drdaviddelorenzo/skills/dnasp), imported
+> from this repository. Not yet on Hermes.
+>
+> ClawHub lists that release under its own version number, not this skill's: its web importer,
+> like `clawhub skill publish` without `--version`, numbers a new skill 1.0.0 and each later
+> import as the next patch, whatever `SKILL.md` says. Publishing through
+> [`publish-clawhub.yml`](.github/workflows/publish-clawhub.yml) instead pins the recorded
+> version, and needs the `CLAWHUB_TOKEN` repository secret.
 
 ## Where the skill is developed
 
@@ -23,7 +30,7 @@ repository packages the skill so it can be installed on its own: at each validat
 Do not fix a statistic here first. A fix made only in this repository is overwritten at the next
 refresh.
 
-## Install (once published)
+## Install
 
 **Hermes Agent**, adding this repository as a tap:
 
