@@ -31,6 +31,26 @@ Answers the ClawBio maintainer review of the DnaSP pull request; ported from the
   root envelope's path or receives the root reproducibility bundle; it gets its own `chrom_`
   directory.
 
+## [0.6.1] - 2026-10-03
+
+Answers the ClawBio maintainer's review of the 0.6.0 pull request.
+
+### Changed
+
+- Coalescent P-values are reported only where the simulated null varies, per statistic
+  and per conditioning: R2 is constant with two sequences, Fu's Fs is constant with two
+  sequences given S but not given theta, and Tajima's D has no variance below four
+  sequences. A constant null is reported with no P-value and a note naming the
+  statistic, instead of the P of 1 such a test would always give.
+- The observed value and a replicate sum R2's terms in the same order, so a genuine tie
+  is bitwise equal and counts in both tails.
+- SKILL.md, the report and the reference say that the null has no recombination and name
+  recombination as a cause of a low Fu's Fs P-value.
+- A run warns before a very large simulation starts, and the report says a seed replays
+  only on the same Python.
+- The module header says the statistics were implemented from the primary literature and
+  checked against the DnaSP 6 source, of which the package contains none.
+
 ## [0.6.0] - 2026-09-17
 
 ### Added
