@@ -13,8 +13,7 @@ The skill itself lives in **[`skills/dnasp/`](skills/dnasp/)**. See
 > **Status:** version 0.6.1, published on ClawHub at
 > [drdaviddelorenzo/skills/dnasp](https://clawhub.ai/drdaviddelorenzo/skills/dnasp). It reports
 > the coalescent-simulation P-values for Tajima's D, R2 and Fu's Fs (`--n-sim`, added in 0.6.0)
-> only where the simulated null varies, and states that the null has no recombination. Not yet
-> on Hermes.
+> only where the simulated null varies, and states that the null has no recombination.
 >
 > Earlier ClawHub releases numbered 0.1.x predate 0.5.3 and carry that registry's own numbering:
 > ClawHub's GitHub importer, like `clawhub skill publish` without `--version`, numbers a new
