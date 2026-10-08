@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Tests and documentation only, no change in behaviour: the historical comparison fixture
+  now counts the variance of haplotype diversity for rp49 (0.000051 against DnaSP's 0.00005)
+  as a match, since the two agree at the five decimals DnaSP prints, and the direct
+  comparison with DnaSP's printed figure covers that row. The recorded assessment in
+  `docs/index.md` becomes 164 matches, two last-displayed-digit differences and four F*
+  mode differences (it was 163, three and four). Same change as ClawBio pull request 546.
 
 ## [0.6.1] - 2026-10-03
 
